@@ -105,10 +105,10 @@ DO $$ BEGIN CREATE TYPE admin_role AS ENUM (
 EXCEPTION
 WHEN duplicate_object THEN null;
 END $$;
-DO $$ BEGIN CREATE TYPE company_tier AS ENUM (
+DO $$ BEGIN CREATE TYPE permission_level AS ENUM (
     'basic',
-    -- Can only post jobs with external links
-    'premium' -- Can receive CVs, analytics, etc.
+    'admin',
+    'super_admin'
 );
 EXCEPTION
 WHEN duplicate_object THEN null;
@@ -169,6 +169,25 @@ CREATE TABLE IF NOT EXISTS profiles (
         OR github_url ~* '^https?://(www\.)?github\.com/'
     )
 );
+-- Admin Users (RID 3220 District Board Members)
+CREATE TABLE IF NOT EXISTS admin_users (
+    rmis_id TEXT PRIMARY KEY,
+    -- RMIS ID as primary key (e.g., 'R12345')
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    mobile TEXT,
+    role admin_role DEFAULT 'moderator',
+    -- District admin hierarchy
+    district TEXT DEFAULT 'RID 3220',
+    -- Sri Lanka/Maldives
+    is_active BOOLEAN DEFAULT true,
+    last_login_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    -- Constraints
+    CONSTRAINT valid_rmis_id CHECK (rmis_id ~ '^[A-Z0-9]+$')
+);
 -- Verification Attempts (for flagged applications)
 CREATE TABLE IF NOT EXISTS verification_attempts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -186,7 +205,7 @@ CREATE TABLE IF NOT EXISTS verification_attempts (
     is_flagged BOOLEAN DEFAULT false,
     -- Admin Review
     verification_status verification_status DEFAULT 'pending',
-    reviewed_by UUID REFERENCES profiles(id),
+    reviewed_by TEXT REFERENCES admin_users(rmis_id),
     reviewed_at TIMESTAMP WITH TIME ZONE,
     admin_notes TEXT,
     -- Metadata
@@ -241,7 +260,7 @@ CREATE TABLE IF NOT EXISTS companies (
     tier company_tier DEFAULT 'basic',
     status company_status DEFAULT 'pending_approval',
     -- Admin Review
-    reviewed_by UUID REFERENCES profiles(id),
+    reviewed_by TEXT REFERENCES admin_users(rmis_id),
     reviewed_at TIMESTAMP WITH TIME ZONE,
     rejection_reason TEXT,
     -- System
@@ -266,6 +285,31 @@ CREATE TABLE IF NOT EXISTS company_members (
     joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(company_id, user_id)
 );
+-- User Permissions (RBAC for admin access)
+CREATE TABLE IF NOT EXISTS permissions (
+    rmis_id TEXT PRIMARY KEY REFERENCES admin_users(rmis_id) ON DELETE CASCADE,
+    -- Links to admin_users.rmis_id
+    -- Permission Level
+    permission_level permission_level DEFAULT 'basic',
+    -- Additional Permissions (JSON for flexibility)
+    additional_permissions JSONB DEFAULT '{}',
+    -- Assignment Info
+    assigned_by TEXT REFERENCES admin_users(rmis_id),
+    assigned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    assignment_reason TEXT,
+    -- Status
+    is_active BOOLEAN DEFAULT true,
+    expires_at TIMESTAMP WITH TIME ZONE,
+    -- Audit
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    -- Constraints
+    CONSTRAINT valid_rmis_id CHECK (rmis_id ~ '^[A-Z0-9]+$'),
+    CONSTRAINT permission_not_expired CHECK (
+        expires_at IS NULL
+        OR expires_at > NOW()
+    )
+);
 -- Jobs
 CREATE TABLE IF NOT EXISTS jobs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -275,6 +319,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     description TEXT NOT NULL,
     responsibilities TEXT,
     requirements TEXT,
+    flyer_url TEXT,
+    -- Firebase Storage URL for job flyer
     -- Categories
     field job_field NOT NULL,
     mode job_mode NOT NULL,
@@ -300,7 +346,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     status job_status DEFAULT 'draft',
     is_active BOOLEAN DEFAULT false,
     -- Admin Review
-    reviewed_by UUID REFERENCES profiles(id),
+    reviewed_by TEXT REFERENCES admin_users(rmis_id),
     reviewed_at TIMESTAMP WITH TIME ZONE,
     rejection_reason TEXT,
     -- Metadata
@@ -331,6 +377,30 @@ CREATE TABLE IF NOT EXISTS job_skills (
     is_required BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(job_id, skill_name)
+);
+-- Skills (Master list for normalization)
+CREATE TABLE IF NOT EXISTS skills (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT UNIQUE NOT NULL,
+    category TEXT,
+    -- 'technical', 'soft', 'tool', 'language', etc.
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+-- Update job_skills to reference skills table
+-- Note: This will be a migration step in production
+-- Job Reviews (Admin approval/rejection history)
+CREATE TABLE IF NOT EXISTS job_reviews (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
+    admin_rmis_id TEXT REFERENCES admin_users(rmis_id) ON DELETE CASCADE,
+    -- Review Action
+    action TEXT NOT NULL CHECK (
+        action IN ('approved', 'rejected', 'revision_requested')
+    ),
+    feedback TEXT,
+    -- Metadata
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 -- Applications
 CREATE TABLE IF NOT EXISTS applications (
@@ -425,27 +495,33 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 -- Admin Users (District Team)
+-- Stored independently, no connection to auth.users or profiles
 CREATE TABLE IF NOT EXISTS admin_users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE UNIQUE,
-    profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    rmis_id TEXT PRIMARY KEY,
     -- Admin Info
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    mobile TEXT,
+    -- Role/Permissions
     role admin_role NOT NULL,
-    permissions JSONB DEFAULT '{}',
-    -- Flexible permissions
+    additional_permissions JSONB DEFAULT '{}',
     -- Assigned By
-    assigned_by UUID REFERENCES admin_users(id),
+    assigned_by TEXT REFERENCES admin_users(rmis_id),
     assigned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     -- Status
     is_active BOOLEAN DEFAULT true,
     last_login_at TIMESTAMP WITH TIME ZONE,
+    -- Audit
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    -- Constraints
+    CONSTRAINT valid_rmis_id CHECK (rmis_id ~ '^[A-Z0-9]+$')
 );
 -- Admin Action Logs (Audit Trail)
 CREATE TABLE IF NOT EXISTS admin_action_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    admin_id UUID REFERENCES admin_users(id),
+    admin_rmis_id TEXT REFERENCES admin_users(rmis_id),
     -- Action Details
     action_type TEXT NOT NULL,
     -- 'approve_company', 'reject_job', 'verify_user', etc.
@@ -510,6 +586,10 @@ CREATE INDEX IF NOT EXISTS idx_cvs_is_active ON cvs(is_active);
 CREATE INDEX IF NOT EXISTS idx_companies_status ON companies(status);
 CREATE INDEX IF NOT EXISTS idx_companies_email ON companies(company_email);
 CREATE INDEX IF NOT EXISTS idx_companies_created_at ON companies(created_at);
+-- Permissions
+CREATE INDEX IF NOT EXISTS idx_permissions_rmis_id ON permissions(rmis_id);
+CREATE INDEX IF NOT EXISTS idx_permissions_level ON permissions(permission_level);
+CREATE INDEX IF NOT EXISTS idx_permissions_is_active ON permissions(is_active);
 -- Jobs
 CREATE INDEX IF NOT EXISTS idx_jobs_company_id ON jobs(company_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
@@ -557,6 +637,9 @@ UPDATE ON cvs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 DROP TRIGGER IF EXISTS update_companies_updated_at ON companies;
 CREATE TRIGGER update_companies_updated_at BEFORE
 UPDATE ON companies FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DROP TRIGGER IF EXISTS update_permissions_updated_at ON permissions;
+CREATE TRIGGER update_permissions_updated_at BEFORE
+UPDATE ON permissions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 DROP TRIGGER IF EXISTS update_jobs_updated_at ON jobs;
 CREATE TRIGGER update_jobs_updated_at BEFORE
 UPDATE ON jobs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -651,8 +734,10 @@ ALTER TABLE verification_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cvs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE company_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE permissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE job_skills ENABLE ROW LEVEL SECURITY;
+ALTER TABLE job_reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE saved_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE email_subscriptions ENABLE ROW LEVEL SECURITY;
@@ -690,12 +775,18 @@ CREATE POLICY "anon_all_companies" ON companies FOR ALL USING (true) WITH CHECK 
 -- Company Members
 DROP POLICY IF EXISTS "anon_all_company_members" ON company_members;
 CREATE POLICY "anon_all_company_members" ON company_members FOR ALL USING (true) WITH CHECK (true);
+-- Permissions
+DROP POLICY IF EXISTS "anon_all_permissions" ON permissions;
+CREATE POLICY "anon_all_permissions" ON permissions FOR ALL USING (true) WITH CHECK (true);
 -- Jobs
 DROP POLICY IF EXISTS "anon_all_jobs" ON jobs;
 CREATE POLICY "anon_all_jobs" ON jobs FOR ALL USING (true) WITH CHECK (true);
 -- Job Skills
 DROP POLICY IF EXISTS "anon_all_job_skills" ON job_skills;
 CREATE POLICY "anon_all_job_skills" ON job_skills FOR ALL USING (true) WITH CHECK (true);
+-- Job Reviews
+DROP POLICY IF EXISTS "anon_all_job_reviews" ON job_reviews;
+CREATE POLICY "anon_all_job_reviews" ON job_reviews FOR ALL USING (true) WITH CHECK (true);
 -- Applications
 DROP POLICY IF EXISTS "anon_all_applications" ON applications;
 CREATE POLICY "anon_all_applications" ON applications FOR ALL USING (true) WITH CHECK (true);

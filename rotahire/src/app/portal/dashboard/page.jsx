@@ -214,7 +214,10 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Button className="h-20 flex flex-col items-center justify-center space-y-2 bg-gradient-to-r from-[#D81B5D] to-[#FF0057] hover:from-[#FF0057] hover:to-[#D81B5D]">
+            <Button 
+              onClick={() => router.push('/portal/dashboard/post-job')}
+              className="h-20 flex flex-col items-center justify-center space-y-2 bg-gradient-to-r from-[#D81B5D] to-[#FF0057] hover:from-[#FF0057] hover:to-[#D81B5D]"
+            >
               <Plus className="w-6 h-6" />
               <span className="font-['Poppins'] font-medium">Post New Job</span>
             </Button>
@@ -298,7 +301,10 @@ export default function DashboardPage() {
               <div className="text-center py-8">
                 <Briefcase className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                 <p className="text-gray-500 font-['Inter'] mb-4">No job postings yet</p>
-                <Button className="bg-gradient-to-r from-[#D81B5D] to-[#FF0057] hover:from-[#FF0057] hover:to-[#D81B5D]">
+                <Button 
+                  onClick={() => router.push('/portal/dashboard/post-job')}
+                  className="bg-gradient-to-r from-[#D81B5D] to-[#FF0057] hover:from-[#FF0057] hover:to-[#D81B5D]"
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   Post Your First Job
                 </Button>

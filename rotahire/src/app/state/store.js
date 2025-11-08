@@ -9,6 +9,10 @@ export const sportsDataAtom = atom([]);
 export const portalUserAtom = atomWithStorage('portalUser', null);
 export const portalLoadingAtom = atom(false);
 
+// Admin authentication atoms
+export const adminUserAtom = atomWithStorage('adminUser', null);
+export const adminLoadingAtom = atom(false);
+
 
 
 
@@ -17,12 +21,12 @@ export function useResetAllAtoms() {
   const setUserDeets = useSetAtom(userDeetsAtom);
   const setSportsData = useSetAtom(sportsDataAtom);
   const setPortalUser = useSetAtom(portalUserAtom);
-
+  const setAdminUser = useSetAtom(adminUserAtom);
 
   return () => {
     setUserDeets(null);
     setSportsData([]);
     setPortalUser(null);
-
+    setAdminUser(null);
   };
 }

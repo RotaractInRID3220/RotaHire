@@ -1,0 +1,88 @@
+import { NextResponse } from 'next/server';
+import { supabase } from '@/lib/supabaseClient';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/nextauth';
+
+// POST: Request revision for a job posting
+export async function POST(request) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session || !session.user) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const { jobId, feedback } = await request.json();
+
+    // Validate required fields
+    if (!jobId || !feedback) {
+      return NextResponse.json(
+        { success: false, error: 'Job ID and feedback are required' },
+        { status: 400 }
+      );
+    }
+
+    // Get admin RMIS ID from session
+    const adminRmisId = session.user.userDeets?.membership_id;
+    
+    if (!adminRmisId) {
+      return NextResponse.json(
+        { success: false, error: 'Admin information not found in session' },
+        { status: 401 }
+      );
+    }
+
+    // Check if job exists and is pending approval
+    const { data: job, error: jobError } = await supabase
+      .from('jobs')
+      .select('id, status, title, company_id')
+      .eq('id', jobId)
+      .eq('status', 'pending_approval')
+      .single();
+
+    if (jobError || !job) {
+      return NextResponse.json(
+        { success: false, error: 'Job not found or not pending approval' },
+        { status: 404 }
+      );
+    }
+
+    // Keep job status as pending_approval, just create review record
+    // Create review record
+    const { error: reviewError } = await supabase
+      .from('job_reviews')
+      .insert({
+        job_id: jobId,
+        admin_rmis_id: adminRmisId,
+        action: 'revision_requested',
+        feedback: feedback,
+        created_at: new Date().toISOString()
+      });
+
+    if (reviewError) {
+      console.error('Error creating review record:', reviewError);
+      // Don't fail the whole operation for review error
+    }
+
+    // TODO: Send notification email to company with revision feedback
+
+    return NextResponse.json({
+      success: true,
+      message: 'Revision requested successfully',
+      data: {
+        job_id: jobId,
+        status: 'draft'
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in request revision:', error);
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}

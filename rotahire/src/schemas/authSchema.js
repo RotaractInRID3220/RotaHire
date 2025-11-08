@@ -21,3 +21,13 @@ export const loginSchema = z.object({
   password: z.string()
     .min(1, 'Password is required')
 });
+
+// Admin login schema - uses username/password for DBMID API authentication
+export const adminLoginSchema = z.object({
+  username: z.string()
+    .min(1, 'Username is required')
+    .min(3, 'Username must be at least 3 characters'),
+  password: z.string()
+    .min(1, 'Password is required')
+    .min(6, 'Password must be at least 6 characters')
+});

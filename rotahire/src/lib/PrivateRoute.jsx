@@ -1,69 +1,100 @@
 "use client";
-import { loadingAtom, userDeetsAtom } from "@/app/state/store";
-import { useAtom } from "jotai";
+import { useSession } from 'next-auth/react';
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
-const PrivateRoute = ({ children, redirectTo = "/admin/login" }) => {
-  const [loading, setLoading] = useAtom(loadingAtom);
-  const [userDeets, setUserDeets] = useAtom(userDeetsAtom);
-  const [hasCheckedStorage, setHasCheckedStorage] = useState(false);
-  const [isWaiting, setIsWaiting] = useState(false);
+const PrivateRoute = ({
+  children,
+  accessType,              // 'admin' or 'portal'
+  allowedRoles,            // Array of role_ids that can access
+  requiredPermission,      // 'admin' or 'super_admin'
+  redirectTo = "/admin/login"
+}) => {
+  const { data: session, status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    // Start the check process once on mount
-    console.log('Component mounted, starting 1500ms wait...');
-    setIsWaiting(true);
-    
-    const timeout = setTimeout(() => {
-      console.log('1500ms wait complete, setting hasCheckedStorage to true');
-      setHasCheckedStorage(true);
-      setIsWaiting(false);
-    }, 1500);
-
-    return () => {
-      console.log('Cleanup: clearing timeout');
-      clearTimeout(timeout);
-    };
-  }, []); 
-
-  useEffect(() => {
-    const isUserEmpty = !userDeets || (Array.isArray(userDeets) && userDeets.length === 0) || Object.keys(userDeets || {}).length === 0;
-    console.log('Redirect check:', { isUserEmpty, hasCheckedStorage, loading });
-    
-    if (isUserEmpty && hasCheckedStorage && !loading) {
-      console.log('Redirecting to:', redirectTo);
-      router.push(redirectTo);
+    if (status === 'loading') return; // Still loading
+    if (!session) {
+      router.push(redirectTo); // Not authenticated
+      return;
     }
-  }, [userDeets, router, redirectTo, hasCheckedStorage, loading]);
 
-  // If we're on the login page, don't apply PrivateRoute logic
-  if (pathname === redirectTo) {
-    return <>{children}</>;
-  }
+    // Check access type
+    if (accessType === 'admin' && !session.user?.hasAdminAccess) {
+      router.push('/unauthorized');
+      return;
+    }
 
-  const isUserEmpty = !userDeets || (Array.isArray(userDeets) && userDeets.length === 0) || Object.keys(userDeets || {}).length === 0;
-  
-  if (!loading && !isUserEmpty) {
-    return <>{children}</>;
-  }
+    if (accessType === 'portal' && !session.user?.hasPortalAccess) {
+      router.push('/unauthorized');
+      return;
+    }
 
-  if (loading || isWaiting || !hasCheckedStorage) {
-    return <div>
-      <div className="flex justify-center items-center h-screen">
-        <img src="/load.svg" alt="" className="w-20" />
+    // Check allowed roles (if specified)
+    if (allowedRoles && !allowedRoles.includes(session.user?.role_id)) {
+      router.push('/unauthorized');
+      return;
+    }
+
+    // Check permission level (if specified)
+    if (requiredPermission) {
+      const userPermission = session.user?.permission_level;
+      if (requiredPermission === 'super_admin' && userPermission !== 'super_admin') {
+        router.push('/unauthorized');
+        return;
+      }
+      if (requiredPermission === 'admin' && !['admin', 'super_admin'].includes(userPermission)) {
+        router.push('/unauthorized');
+        return;
+      }
+    }
+  }, [session, status, router, accessType, allowedRoles, requiredPermission, redirectTo]);
+
+  // Show loading spinner while checking authentication
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#D81B5D] mx-auto"></div>
+          <p className="mt-4 text-gray-600">Checking permissions...</p>
+        </div>
       </div>
-    </div>
+    );
   }
 
-  // If we reach here, user is empty and storage has been checked - show loading until redirect
-  return <div>
-    <div className="flex justify-center items-center h-screen">
-      <img src="/load.svg" alt="" className="w-20" />
-    </div>
-  </div>;
+  // Don't render anything if not authenticated or unauthorized
+  if (!session) {
+    return null;
+  }
+
+  // Check access type
+  if (accessType === 'admin' && !session.user?.hasAdminAccess) {
+    return null;
+  }
+
+  if (accessType === 'portal' && !session.user?.hasPortalAccess) {
+    return null;
+  }
+
+  // Check allowed roles
+  if (allowedRoles && !allowedRoles.includes(session.user?.role_id)) {
+    return null;
+  }
+
+  // Check permission level
+  if (requiredPermission) {
+    const userPermission = session.user?.permission_level;
+    if (requiredPermission === 'super_admin' && userPermission !== 'super_admin') {
+      return null;
+    }
+    if (requiredPermission === 'admin' && !['admin', 'super_admin'].includes(userPermission)) {
+      return null;
+    }
+  }
+
+  return <>{children}</>;
 };
 
 export default PrivateRoute;
