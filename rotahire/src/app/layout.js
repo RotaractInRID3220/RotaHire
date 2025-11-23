@@ -2,6 +2,7 @@ import { Bebas_Neue, Poppins } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import SessionProvider from "@/components/SessionProvider";
+import NavBar from "@/components/NavBar";
 
 const bebas = Bebas_Neue({
   variable: "--font-bebas",
@@ -30,7 +31,10 @@ export default function RootLayout({ children }) {
         className={`${bebas.variable} ${poppins.variable} antialiased dark`}
       >
         <SessionProvider>
-          {children}
+          <NavBar />
+          <div className="pt-20">
+            {children}
+          </div>
         </SessionProvider>
         <Toaster richColors  />
 

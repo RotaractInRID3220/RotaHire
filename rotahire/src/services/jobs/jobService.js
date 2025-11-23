@@ -127,30 +127,52 @@ export const getCompanyJobDetails = async (userId, jobId) => {
   }
 };
 
-// Updates job details (for draft, rejected, or pending approval jobs)
-export const updateJobDetails = async (userId, jobId, updateData) => {
+// ==========================================
+// PUBLIC JOB SEARCH SERVICES
+// ==========================================
+
+// Fetches public jobs (approved and active) with optional filters and search
+export const getPublicJobs = async (filters = {}) => {
   try {
-    if (!userId) {
-      throw new Error('User ID is required');
-    }
-    if (!jobId) {
-      throw new Error('Job ID is required');
-    }
+    const params = new URLSearchParams();
+    
+    // Add pagination
+    if (filters.page) params.append('page', filters.page);
+    if (filters.limit) params.append('limit', filters.limit);
+    
+    // Add search
+    if (filters.search) params.append('search', filters.search);
+    
+    // Add filters
+    if (filters.field) params.append('field', filters.field);
+    if (filters.mode) params.append('mode', filters.mode);
+    if (filters.experience) params.append('experience', filters.experience);
+    if (filters.location) params.append('location', filters.location);
 
-    const response = await fetch(`/api/jobs/company/${jobId}?userId=${userId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updateData)
-    });
-
+    const response = await fetch(`/api/jobs?${params.toString()}`);
     const result = await response.json();
 
     if (!result.success) {
       throw new Error(result.error);
     }
 
-    return result.data;
+    return result;
   } catch (error) {
+    console.error('Error fetching public jobs:', error);
+    throw error;
+  }
+};
+
+// Search jobs with a query string
+export const searchJobs = async (searchQuery, page = 1) => {
+  try {
+    return await getPublicJobs({
+      search: searchQuery,
+      page,
+      limit: 12
+    });
+  } catch (error) {
+    console.error('Error searching jobs:', error);
     throw error;
   }
 };
