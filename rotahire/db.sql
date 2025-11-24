@@ -221,6 +221,7 @@ CREATE TABLE IF NOT EXISTS cvs (
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
     -- File Info
     firebase_storage_path TEXT NOT NULL,
+    label TEXT,
     -- Format: cvs/{rmis_id}_{timestamp}.pdf
     original_filename TEXT NOT NULL,
     file_size_bytes INTEGER NOT NULL,
@@ -233,7 +234,7 @@ CREATE TABLE IF NOT EXISTS cvs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     -- Constraints
-    CONSTRAINT valid_file_size CHECK (file_size_bytes <= 2097152) -- 2MB max
+    CONSTRAINT valid_file_size CHECK (file_size_bytes <= 5242880) -- 5MB max
 );
 -- Companies
 CREATE TABLE IF NOT EXISTS companies (
@@ -407,6 +408,7 @@ CREATE TABLE IF NOT EXISTS applications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id UUID REFERENCES jobs(id) ON DELETE CASCADE,
     user_id UUID REFERENCES profiles(id) ON DELETE CASCADE,
+    club_id INTEGER DEFAULT 0,
     -- Quick Apply Data
     applicant_name TEXT NOT NULL,
     applicant_email TEXT NOT NULL,
@@ -414,7 +416,7 @@ CREATE TABLE IF NOT EXISTS applications (
     applicant_rmis_id TEXT NOT NULL,
     applicant_linkedin_url TEXT,
     applicant_github_url TEXT,
-    -- If required
+    applicant_portfolio_url TEXT,
     -- CV Reference
     cv_id UUID REFERENCES cvs(id),
     cv_snapshot_path TEXT,

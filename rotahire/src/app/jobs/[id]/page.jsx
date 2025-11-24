@@ -151,8 +151,7 @@ export default function JobDetailsPage() {
     if (job?.externalApplicationUrl) {
       window.open(job.externalApplicationUrl, '_blank', 'noopener,noreferrer');
     } else {
-      // TODO: Navigate to application form
-      toast.info('Application form coming soon!');
+      router.push(`/jobs/${params.id}/apply`);
     }
   };
 

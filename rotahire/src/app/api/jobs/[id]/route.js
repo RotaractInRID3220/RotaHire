@@ -35,6 +35,9 @@ export async function GET(request, { params }) {
         is_salary_disclosed,
         accepts_direct_applications,
         external_application_url,
+        requires_linkedin,
+        requires_github,
+        requires_portfolio,
         created_at,
         company:companies(
           id,
@@ -87,6 +90,9 @@ export async function GET(request, { params }) {
         : null,
       acceptsDirectApplications: data.accepts_direct_applications,
       externalApplicationUrl: data.external_application_url,
+      requiresLinkedin: data.requires_linkedin,
+      requiresGithub: data.requires_github,
+      requiresPortfolio: data.requires_portfolio,
       company: {
         id: data.company?.id,
         name: data.company?.company_name || 'Unknown Company',

@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAtom } from 'jotai';
 import { ArrowLeft, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
+import { portalUserAtom } from '@/app/state/store';
 import JobStep1 from './components/JobStep1';
 import JobStep2 from './components/JobStep2';
 import JobStep3 from './components/JobStep3';
@@ -17,6 +19,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export default function PostJobPage() {
   const router = useRouter();
+  const [portalUser] = useAtom(portalUserAtom);
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -102,6 +105,12 @@ export default function PostJobPage() {
     try {
       setIsSubmitting(true);
       
+      // Check if user is authenticated
+      if (!portalUser?.id) {
+        toast.error('User not authenticated');
+        return;
+      }
+      
       // Upload job flyer if provided
       let jobFlyerUrl = null;
       if (formData.job_flyer_file) {
@@ -135,8 +144,8 @@ export default function PostJobPage() {
         company_logo_override_url: formData.company_logo_override_url || null
       };
       
-      // Submit job posting
-      await createJob(submissionData);
+      // Submit job posting with userId
+      await createJob(portalUser.id, submissionData);
       
       toast.success('Job posted successfully! Awaiting admin approval.');
       
