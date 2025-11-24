@@ -176,3 +176,24 @@ export const searchJobs = async (searchQuery, page = 1) => {
     throw error;
   }
 };
+
+// Fetches a single job by ID
+export const getJobById = async (jobId) => {
+  try {
+    if (!jobId) {
+      throw new Error('Job ID is required');
+    }
+
+    const response = await fetch(`/api/jobs/${jobId}`);
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error);
+    }
+
+    return result.data;
+  } catch (error) {
+    console.error('Error fetching job by ID:', error);
+    throw error;
+  }
+};
