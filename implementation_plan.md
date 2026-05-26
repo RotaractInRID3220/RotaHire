@@ -1,0 +1,7 @@
+- CV management, 2 per user
+- Company Analytics
+- Admin Analytics
+- Application view from company end, shortlist/reject
+- Application flag feature, for admin.
+- Interview scheduling
+- Email responses
